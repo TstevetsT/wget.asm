@@ -16,28 +16,37 @@ endstruc
 section .text
 
 _start:
-;1)  Accept DNS from Command Line, parse for validity, and move to url
-call GetURL
-;2)  DNS Lookup to find IP, IP is .sin_addr in server
-call DNSLookup
-;3)  Open File named by last section of url
-call OpenFile
-;4)  Create Socket
-call CreateSocket
-
-
-GetURL:
 push ebp
 mov ebp, esp
 push ebx
-push edi
 push esi
-	mov ebx, [ebp+16] 	;Load address of argument (URL)
+push edi
+xor ebx, ebx
+mov ebx, [ebp+16] 	;Load address of argument (URL)
+cmp ebx, 0
+jz exit
+call GetURL   ; Accept DNS from Command Line, parse validity, move to url
+call DNSLookup	;  DNS Lookup to find IP, IP is .sin_addr in server
+call CreateSocket 	;  Create Socket
+call MakeConnection 	;  Establish Connection 
+call OpenFile	;  Open File named by last section of url
+call WriteFile  
+call CloseFile 
+
+exit:
+pop edi
+pop esi
+pop ebx
+mov esp, ebp
+pop ebp
+mov eax, 1
+int 0x80
+
+GetURL:
 	mov esi, 0   		;outer loop counter
 	mov edi, 0		;inner loop counter
 	.loop:
 	mov al, [ebx+esi]	;load URL character
-	.t:
 	cmp al, 0x00		;Check if Null
 	jz .usedefaultfilename	;If null all char have been viewed
 	cmp al, 0x2F		;check if slash
@@ -93,10 +102,9 @@ push esi
 		.endofurl:
 		cmp byte [filename], 0
 		je .usedefaultfilename
-		jmp .filenamedone
+		jmp .filenamedone		
 	.usedefaultfilename:
 		mov al, 0
-		push ecx
 		mov ecx, defaultfilename_len
 		mov edi, 0
 		.defaultfilenameloop:
@@ -107,28 +115,18 @@ push esi
 			inc edi
 			jmp .defaultfilenameloop
 		.filenamedone:
-		pop ecx
-ret
+	ret
 
-;2)  DNS Lookup to find IP, IP is .sin_addr in server
-DNSLookup:
+DNSLookup:		;2)  DNS Lookup to find IP, IP is .sin_addr in server
 	mov eax, url  
 	push eax
 	call resolv	;nslookup url
 	add esp, 4
-mov [server+sockaddr_in.sin_addr], eax
-ret
+	mov [server+sockaddr_in.sin_addr], eax
+	ret
 
-;3)  Open File named by last section of url
-OpenFile:
-	mov eax, 5  	;open sys call number
-	mov ebx, filename
-	mov ecx, 700o
-	int 0x80   	;opens file and eax contains file descripter
-ret
 
-;4)  Create Socket
-CreateSocket:
+CreateSocket:           ;3)  Create Socket
 	push eax	;put write file fd at top of stack 
 	push dword 0
 	push dword 1	;SOCK_STREAM
@@ -137,43 +135,40 @@ CreateSocket:
 	mov ebx, 1	;sys_socket
 	mov eax, 0x66	;sys_socketcall
 	int 0x80   	;eax holds socket file descripter
-	add esp, 12	;resets stack leaving output file fd at top
-	push eax     	;socket fd con
-ret
+	add esp, 16	;resets stack leaving output file fd at top
+;	push eax     	;socket fd con
+	ret
 
-;5)  Establish Connection 
+MakeConnection:            ;4)  Establish Connection 
 	mov ecx, server
 	mov ebx, 3
 	mov eax, 0x66
-	
-;	push dword [server+sockaddr_in.sin_addr] ;Loads server IP
-;	push word 0x5000   	;Port 80
-;	push word 2   		;???
-;	mov ecx, esp		;stack pointer to ecx for sys_socket
-;	push dword 16
-;	push ecx
-;	push eax		;loads socket file descriptor
-;	mov ecx, esp
-;	mov ebx, 
- 
+	ret	
 
+OpenFile:               ;5)  Open File named by last section of url
+	mov eax, 5  	;open sys call number
+	mov ebx, filename
+	mov ecx, 0o100  ;O_CREAT creates the file
+	mov edx, 0o666  ;Read and Write for user, group, and others
+	int 0x80   	;opens file and eax contains file descripter
 	test:
-;?)  Retrieve Contents of URL
-;?)  Put contents in a file
-;  socket(AF_INET,SOCK_STREAM,0)
-;push dword 0    ;last argument/\
-;push dword 1    ;sock_stream=1
-;push dword 2    ;AF_INET=2
-;mov ecx, esp
-;mov ebx, 1 	;sys_socket
-;mov eax, 0x66	;sys_socketcall
-;int 0x80  	;fd returned in eax
-pop esi
-pop edi
-pop ebx
-mov esp, ebp
-pop ebp
-ret
+	ret
+
+WriteFile:
+	mov esi, eax
+	mov edx, writingtofilelen	;Number of bytes to write
+	mov ecx, writingtofile
+	mov ebx, 1	;Writing to stdout
+	mov eax, 4	;sys_write systemcall number
+	int 0x80
+	mov ebx, esi
+	mov eax, 4
+	int 0x80
+	ret
+
+CloseFile:
+	mov eax, 6      ;sys_close systemcall number ebx must be holding fd
+	ret
 
 section .data
 server:	istruc sockaddr_in
@@ -187,8 +182,9 @@ invalid: db 'enter a valid url',0xa
 invalidlen: equ $-invalid
 defaultfilename: db 'index.html',0x00
 defaultfilename_len: equ $-defaultfilename
+writingtofile: db 'Writing to File',0xa
+writingtofilelen: equ $-writingtofile
 
 section .bss
 url resb 200
 filename resb 200
-

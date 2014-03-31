@@ -6,10 +6,14 @@ set disassembly-flavor intel
 #catch fork
 #catch exec
 
-b GetURL
-b DNSLookup
-b OpenFile
-b CreateSocket
+#b _start
+#b GetURL
+#b DNSLookup
+#b CreateSocket
+#b MakeConnection
+#b OpenFile
+b WriteFile
+b CloseFile
 
 #display /t $edx
 
@@ -17,16 +21,22 @@ b CreateSocket
 #display /d &HeapSize
 #display /x &HeapStop
 #display /x &HeapStart
-#display /xw $ebp
+#display /cb 0xbffff8d7
+#display /12xw $ebp
 #display /xw $edi
 #display /xw $esi
-#display /xw $edx
-#display /xw $ecx
-#display /xw $ebx
-#display /xw $eax
+display /xw $edx
+display /xw $ecx
+display /xw $ebx
+display /xw $eax
+#display /dw $eax
+#display /uw $eax
+#display /c $al
 #disp /110dw 0x0804b000
-#disp /15xw $esp
-#disp /10xw &ptr
+#disp /8xw $esp
+#disp /s &filename
+#disp /s &url
+#disp /db &writefd
 disp /i $eip
 
 run m google.com
