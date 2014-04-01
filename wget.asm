@@ -24,23 +24,37 @@ push edi
 xor ebx, ebx
 mov ebx, [ebp+16] 	;Load address of argument (URL)   +16 for gdb
 cmp ebx, 0x0
-je exit
+je error
 call GetURL   	;Accept DNS from Command Line, parse validity, move to url
 call DNSLookup		;DNS Lookup to find IP, IP is .sin_addr in server
+cmp eax, 0
+jle error
 call CreateSocket 	;Create Socket
+cmp eax, 0
+jle error
 call MakeConnection 	;Establish Connection 
+cmp eax, 0		;exit if succesful connection was not created
+jnz error
 call OpenFile		;Open File named by last section of url
 call WriteFile  
 call CloseFile 
 
+error:
+	mov edx, errorlen	;Number of bytes to write
+	mov ecx, errormes
+	mov ebx, 1	;Writing to stdout
+	mov eax, 4	;sys_write systemcall number
+	int 0x80
+
+
 exit:
-pop edi
-pop esi
-pop ebx
-mov esp, ebp
-pop ebp
-mov eax, 1
-int 0x80
+	pop edi
+	pop esi
+	pop ebx
+	mov esp, ebp
+	pop ebp
+	mov eax, 1
+	int 0x80
 
 GetURL:
 	mov esi, 0   		;outer loop counter
@@ -125,7 +139,12 @@ GetURL:
 				inc edi
 				inc ecx
 				jmp .buildpath
-			.pathdone:
+		.pathdone:
+			cmp byte [path], 0x2F
+			je .pathok
+			mov byte [path], 0x2F   ;insert slash
+			mov byte [path+1], 0x0
+		.pathok:
 	ret
 
 DNSLookup:		;2)  DNS Lookup to find IP, IP is .sin_addr in server
@@ -157,6 +176,7 @@ MakeConnection:            ;4)  Establish Connection
 	mov ebx, 3		;connect socketcall
 	mov eax, 0x66		;socketcall syscall # 102d=66x
 	int 0x80
+	add esp, 12
 	ret	
 
 OpenFile:               ;5)  Open File named by last section of url
@@ -199,6 +219,8 @@ defaultfilename: db 'index.html',0x00
 defaultfilename_len: equ $-defaultfilename
 writingtofile: db 'Writing to File',0xa
 writingtofilelen: equ $-writingtofile
+errormes: db 'error',0xa
+errorlen: equ $-errormes
 
 section .bss
 url resb 200

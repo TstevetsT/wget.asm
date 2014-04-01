@@ -9,7 +9,8 @@ set disassembly-flavor intel
 #b _start
 #b GetURL
 #b GetURL.findfilename
-#b DNSLookup
+b GetURL.pathdone
+b DNSLookup
 b CreateSocket
 b MakeConnection
 b OpenFile
@@ -41,4 +42,4 @@ disp /8xw $esp
 #disp /db &writefd
 disp /i $eip
 
-run m google.com/path/to/filename.dat
+#run m google.com/path/to/filename.dat
