@@ -8,21 +8,23 @@ set disassembly-flavor intel
 
 #b _start
 #b GetURL
+#b GetURL.findfilename
 #b DNSLookup
-#b CreateSocket
-#b MakeConnection
-#b OpenFile
-b WriteFile
-b CloseFile
+b CreateSocket
+b MakeConnection
+b OpenFile
+#b WriteFile
+#b CloseFile
 
 #display /t $edx
 
-#display /d &HeapInit
-#display /d &HeapSize
+display /s &path
+display /s &filename
+display /s &url
 #display /x &HeapStop
 #display /x &HeapStart
 #display /cb 0xbffff8d7
-#display /12xw $ebp
+display /12xw $ebp
 #display /xw $edi
 #display /xw $esi
 display /xw $edx
@@ -33,10 +35,10 @@ display /xw $eax
 #display /uw $eax
 #display /c $al
 #disp /110dw 0x0804b000
-#disp /8xw $esp
+disp /8xw $esp
 #disp /s &filename
 #disp /s &url
 #disp /db &writefd
 disp /i $eip
 
-run m google.com
+run m google.com/path/to/filename.dat

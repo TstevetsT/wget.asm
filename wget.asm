@@ -22,14 +22,14 @@ push ebx
 push esi
 push edi
 xor ebx, ebx
-mov ebx, [ebp+16] 	;Load address of argument (URL)
-cmp ebx, 0
-jz exit
-call GetURL   ; Accept DNS from Command Line, parse validity, move to url
-call DNSLookup	;  DNS Lookup to find IP, IP is .sin_addr in server
-call CreateSocket 	;  Create Socket
-call MakeConnection 	;  Establish Connection 
-call OpenFile	;  Open File named by last section of url
+mov ebx, [ebp+16] 	;Load address of argument (URL)   +16 for gdb
+cmp ebx, 0x0
+je exit
+call GetURL   	;Accept DNS from Command Line, parse validity, move to url
+call DNSLookup		;DNS Lookup to find IP, IP is .sin_addr in server
+call CreateSocket 	;Create Socket
+call MakeConnection 	;Establish Connection 
+call OpenFile		;Open File named by last section of url
 call WriteFile  
 call CloseFile 
 
@@ -74,12 +74,13 @@ GetURL:
 		inc edi
 		jmp .dubslash
 	.findfilename:
+		mov ecx, esi
 		jmp .newsection
 		.nextchar:
 		mov al, [ebx+esi]
 		cmp al, 0x00
 		je .endofurl
-		cmp al, 0x2F
+		cmp al, 0x2F	;is char slash?
 		je .newsection
 		mov [filename+edi], al
 		inc esi
@@ -115,6 +116,16 @@ GetURL:
 			inc edi
 			jmp .defaultfilenameloop
 		.filenamedone:
+			xor edi, edi
+			.buildpath:
+				mov al, [ebx+ecx]
+				cmp al, 0x0
+				je .pathdone
+				mov [path+edi], al
+				inc edi
+				inc ecx
+				jmp .buildpath
+			.pathdone:
 	ret
 
 DNSLookup:		;2)  DNS Lookup to find IP, IP is .sin_addr in server
@@ -127,7 +138,6 @@ DNSLookup:		;2)  DNS Lookup to find IP, IP is .sin_addr in server
 
 
 CreateSocket:           ;3)  Create Socket
-	push eax	;put write file fd at top of stack 
 	push dword 0
 	push dword 1	;SOCK_STREAM
 	push dword 2	;AF_INET
@@ -135,29 +145,33 @@ CreateSocket:           ;3)  Create Socket
 	mov ebx, 1	;sys_socket
 	mov eax, 0x66	;sys_socketcall
 	int 0x80   	;eax holds socket file descripter
-	add esp, 16	;resets stack leaving output file fd at top
-;	push eax     	;socket fd con
+	add esp, 12	;resets stack leaving output file fd at top
+	mov edi, eax	;edi now holds socket fd
 	ret
 
 MakeConnection:            ;4)  Establish Connection 
-	mov ecx, server
-	mov ebx, 3
-	mov eax, 0x66
+	push sockaddr_size	;sockaddr size to stack
+	push server		;sockaddr struc address to stack
+	push edi		;socket fd to stack
+	mov ecx, esp		;top of stack to ecx
+	mov ebx, 3		;connect socketcall
+	mov eax, 0x66		;socketcall syscall # 102d=66x
+	int 0x80
 	ret	
 
 OpenFile:               ;5)  Open File named by last section of url
 	mov eax, 5  	;open sys call number
 	mov ebx, filename
-	mov ecx, 0o100  ;O_CREAT creates the file
-	mov edx, 0o666  ;Read and Write for user, group, and others
+	mov ecx, 0o102  ;O_CREAT creates the file and makes it Read/Write
+	mov edx, 0o0666 ;Read and Write for user, group, and others
 	int 0x80   	;opens file and eax contains file descripter
 	test:
 	ret
 
 WriteFile:
 	mov esi, eax
-	mov edx, writingtofilelen	;Number of bytes to write
-	mov ecx, writingtofile
+	mov edx, 20	;Number of bytes to write
+	mov ecx, path
 	mov ebx, 1	;Writing to stdout
 	mov eax, 4	;sys_write systemcall number
 	int 0x80
@@ -167,13 +181,14 @@ WriteFile:
 	ret
 
 CloseFile:
+	mov ebx, esi 	;File Descriptor for opened File
 	mov eax, 6      ;sys_close systemcall number ebx must be holding fd
 	ret
 
 section .data
 server:	istruc sockaddr_in
 	at sockaddr_in.sin_family, dw 2        ;AF_INET=2
-	at sockaddr_in.sin_port, dw 0x5000	;Port
+	at sockaddr_in.sin_port, dw 0x5000	;Port 80 in network byte 
   	at sockaddr_in.sin_addr, dd 0x0200a8c0	;IP Address in net byte order
 iend
 
@@ -188,3 +203,4 @@ writingtofilelen: equ $-writingtofile
 section .bss
 url resb 200
 filename resb 200
+path resb 200
