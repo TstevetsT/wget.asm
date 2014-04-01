@@ -22,7 +22,7 @@ push ebx
 push esi
 push edi
 xor ebx, ebx
-mov ebx, [ebp+16] 	;Load address of argument (URL)   +16 for gdb
+mov ebx, [ebp+12] 	;Load address of argument (URL)   +16 for gdb
 cmp ebx, 0x0
 je error
 call GetURL   	;Accept DNS from Command Line, parse validity, move to url
@@ -36,8 +36,10 @@ call MakeConnection 	;Establish Connection
 cmp eax, 0		;exit if succesful connection was not created
 jnz error
 call OpenFile		;Open File named by last section of url
+call BuildGet
 call WriteFile  
 call CloseFile 
+jmp exit
 
 error:
 	mov edx, errorlen	;Number of bytes to write
@@ -165,13 +167,13 @@ CreateSocket:           ;3)  Create Socket
 	mov eax, 0x66	;sys_socketcall
 	int 0x80   	;eax holds socket file descripter
 	add esp, 12	;resets stack leaving output file fd at top
-	mov edi, eax	;edi now holds socket fd
+	mov esi, eax	;esi now holds socket fd
 	ret
 
 MakeConnection:            ;4)  Establish Connection 
-	push sockaddr_size	;sockaddr size to stack
+	push dword [sockaddr_size]	;sockaddr size to stack
 	push server		;sockaddr struc address to stack
-	push edi		;socket fd to stack
+	push esi		;socket fd to stack
 	mov ecx, esp		;top of stack to ecx
 	mov ebx, 3		;connect socketcall
 	mov eax, 0x66		;socketcall syscall # 102d=66x
@@ -185,25 +187,122 @@ OpenFile:               ;5)  Open File named by last section of url
 	mov ecx, 0o102  ;O_CREAT creates the file and makes it Read/Write
 	mov edx, 0o0666 ;Read and Write for user, group, and others
 	int 0x80   	;opens file and eax contains file descripter
-	test:
+	mov edi, eax	;moves output file descriptor into edi
 	ret
 
+BuildGet:           ;get1 path get2 url get3       strlen
+	push esi
+	push edi
+	xor edi, edi
+	xor esi, esi
+	xor eax, eax
+	mov al, [get1+edi]
+	.get1loop:
+		cmp al,0
+		jz .addpath
+		mov [get+edi], al
+		inc edi
+		mov al, [get1+edi]
+		jmp .get1loop
+	.addpath:
+		mov al, [path+esi]
+		.pathloop:
+			cmp al, 0
+			jz .addget2
+			mov [get+edi], al
+			inc edi
+			inc esi
+			mov al, [path+esi]
+			jmp .pathloop
+	.addget2:
+		xor esi, esi
+		mov al, [get2+esi]
+		.get2loop:
+			cmp al, 0
+			jz .addurl
+			mov [get+edi], al
+			inc edi
+			inc esi
+			mov al, [get2+esi]
+			jmp .get2loop
+	.addurl:
+		xor esi, esi
+		mov al, [url+esi]
+		.urlloop:
+			cmp al, 0
+			jz .addget3
+			mov [get+edi], al
+			inc edi
+			inc esi
+			mov al, [url+esi]
+			jmp .urlloop
+	.addget3:
+		xor esi, esi
+		mov al, [get3+esi]
+		.get3loop:
+			cmp al, 0
+			jz .done
+			mov [get+edi], al
+			inc edi
+			inc esi
+			mov al, [get3+esi]
+			jmp .get3loop
+	.done:
+	mov [getlen], edi	
+	pop edi
+	pop esi
+	ret
+
+
 WriteFile:
-	mov esi, eax
-	mov edx, 20	;Number of bytes to write
-	mov ecx, path
+	mov edx, [getlen]	;Number of bytes to write
+	mov ecx, get
 	mov ebx, 1	;Writing to stdout
 	mov eax, 4	;sys_write systemcall number
 	int 0x80
+	
+	mov ebx, esi	;Writing to socket
+	mov eax, 4	;sys_write systemcall number
+	int 0x80
+	
+	mov edx, recbuflen
+	mov ecx, recbuf
 	mov ebx, esi
+	mov eax, 3	;Read From Socket
+	int 0x80
+
+	mov edx, recbuflen
+	mov ecx, recbuf
+	mov ebx, edi
 	mov eax, 4
 	int 0x80
 	ret
 
 CloseFile:
-	mov ebx, esi 	;File Descriptor for opened File
+	mov ebx, edi 	;File Descriptor for opened File
 	mov eax, 6      ;sys_close systemcall number ebx must be holding fd
 	ret
+
+strlen:          ;l_strlen(char *str)
+        ;returns the length of a null terminated string
+        push ebp
+        mov ebp, esp
+        push esi
+        push ecx
+        xor esi, esi
+        mov ecx, [ebp+8]
+        .loop:
+                cmp byte [ecx+esi], 0x0
+                je .done
+                add esi, 1
+                jmp .loop
+        .done:
+        mov eax, esi
+        pop ecx
+        pop esi
+        pop ebp
+        ret
+
 
 section .data
 server:	istruc sockaddr_in
@@ -221,8 +320,19 @@ writingtofile: db 'Writing to File',0xa
 writingtofilelen: equ $-writingtofile
 errormes: db 'error',0xa
 errorlen: equ $-errormes
+get1: db 'GET ',0x0
+get1len: equ $-get1
+get2: db ' HTTP/1.0',0xd,0xA,'Host:  ',0x0
+get2len: equ $-get2
+get3: db 0xd,0xa,0xd,0xa,0x0
+get3len: equ $-get3
+
 
 section .bss
 url resb 200
 filename resb 200
 path resb 200
+recbuf: resb 2000
+recbuflen: equ $-recbuf
+get: resb 200
+getlen: resd 1

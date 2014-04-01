@@ -9,16 +9,21 @@ set disassembly-flavor intel
 #b _start
 #b GetURL
 #b GetURL.findfilename
-b GetURL.pathdone
-b DNSLookup
-b CreateSocket
-b MakeConnection
+#b GetURL.pathdone
+#b DNSLookup
+#b CreateSocket
+#b MakeConnection
 b OpenFile
-#b WriteFile
-#b CloseFile
+b BuildGet
+b BuildGet.done
+#b test
+b WriteFile
+b CloseFile
 
 #display /t $edx
 
+display /s &get
+display /s &recbuf
 display /s &path
 display /s &filename
 display /s &url
@@ -32,6 +37,7 @@ display /xw $edx
 display /xw $ecx
 display /xw $ebx
 display /xw $eax
+display /c $al
 #display /dw $eax
 #display /uw $eax
 #display /c $al
@@ -42,4 +48,4 @@ disp /8xw $esp
 #disp /db &writefd
 disp /i $eip
 
-#run m google.com/path/to/filename.dat
+run m www.nps.edu
