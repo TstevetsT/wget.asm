@@ -1,8 +1,8 @@
-;
+;http://cocoafactory.com/blog/2012/11/23/x86-64-assembly-language-tutorial-part-1/
 ;compile with nasm -f elf assn4.asm
 ;link/load with: ld -o assn4 assn4.o dns.o
 ;run with ./assn4 <URL>   
-BITS 32
+BITS 64
 global _start
 extern resolv
 
@@ -16,24 +16,24 @@ endstruc
 section .text
 
 _start:
-push ebp
-mov ebp, esp
-push ebx
-push esi
-push edi
-xor ebx, ebx
-mov ebx, [ebp+12] 	;Load address of argument (URL)   +16 for gdb
-cmp ebx, 0x0
+push rbp
+mov rbp, rsp
+push rbx
+push rsi
+push rdi
+xor rbx, rbx
+mov rbx, [rbp+12] 	;Load address of argument (URL)   +16 for gdb
+cmp rbx, 0x0
 je error
 call GetURL   	;Accept DNS from Command Line, parse validity, move to url
 call DNSLookup		;DNS Lookup to find IP, IP is .sin_addr in server
-cmp eax, 0
+cmp rax, 0
 jle error
 call CreateSocket 	;Create Socket
-cmp eax, 0
+cmp rax, 0
 jle error
 call MakeConnection 	;Establish Connection 
-cmp eax, 0		;exit if succesful connection was not created
+cmp rax, 0		;exit if succesful connection was not created
 jnz error
 call OpenFile		;Open File named by last section of url
 call BuildGet
@@ -42,79 +42,79 @@ call CloseFile
 jmp exit
 
 error:
-	mov edx, errorlen	;Number of bytes to write
-	mov ecx, errormes
-	mov ebx, 1	;Writing to stdout
-	mov eax, 4	;sys_write systemcall number
+	mov rdx, errorlen	;Number of bytes to write
+	mov rcx, errormes
+	mov rbx, 1	;Writing to stdout
+	mov rax, 4	;sys_write systemcall number
 	int 0x80
 
 
 exit:
-	pop edi
-	pop esi
-	pop ebx
-	mov esp, ebp
-	pop ebp
-	mov eax, 1
+	pop rdi
+	pop rsi
+	pop rbx
+	mov rsp, rbp
+	pop rbp
+	mov rax, 1
 	int 0x80
 
 GetURL:
-	mov esi, 0   		;outer loop counter
-	mov edi, 0		;inner loop counter
+	mov rsi, 0   		;outer loop counter
+	mov rdi, 0		;inner loop counter
 	.loop:
-	mov al, [ebx+esi]	;load URL character
+	mov al, [rbx+rsi]	;load URL character
 	cmp al, 0x00		;Check if Null
 	jz .usedefaultfilename	;If null all char have been viewed
 	cmp al, 0x2F		;check if slash
 	jz .slash		
-	mov [url+esi], al     	;copy char into URL
-	inc esi			;increment to next URL char
+	mov [url+rsi], al     	;copy char into URL
+	inc rsi			;increment to next URL char
 	jmp .loop		
 	.slash:			;If a slash in encountered	
-	inc esi
-	mov al, [ebx+esi]
+	inc rsi
+	mov al, [rbx+rsi]
 	cmp al, 0x00		;is char null?
 	je .usedefaultfilename
 	cmp al, 0x2F		;is char a slash?
 	je .dubslash
-	dec esi
+	dec rsi
 	jmp .findfilename	;slash must follow url, find filename
 	.dubslash:
-		inc esi
-		mov al, [ebx+esi]
+		inc rsi
+		mov al, [rbx+rsi]
 		cmp al, 0x00	;is char null?
 		je .usedefaultfilename
 		cmp al, 0x2F   	;is char a slash?
 		je .findfilename
-		mov [url+edi], al
-		inc edi
+		mov [url+rdi], al
+		inc rdi
 		jmp .dubslash
 	.findfilename:
-		mov ecx, esi
+		mov rcx, rsi
 		jmp .newsection
 		.nextchar:
-		mov al, [ebx+esi]
+		mov al, [rbx+rsi]
 		cmp al, 0x00
 		je .endofurl
 		cmp al, 0x2F	;is char slash?
 		je .newsection
-		mov [filename+edi], al
-		inc esi
-		inc edi
+		mov [filename+rdi], al
+		inc rsi
+		inc rdi
 		jmp .nextchar
 		.newsection:
-			push esi
-			mov esi, 0
+			push rsi
+			mov rsi, 0
 			.zeroloop:
-				cmp esi, edi
+				cmp rsi, rdi
 				je .outzeroloop
-				mov byte [filename+esi], 0x00
-				inc esi
+				mov byte [filename+rsi], 0x00
+				inc rsi
 				jmp .zeroloop
 			.outzeroloop:
-			pop esi
-			inc esi
-			mov edi, 0
+			pop rsi
+			inc rsi
+			mov rdi, 0
 			jmp .nextchar
 		.endofurl:
 		cmp byte [filename], 0
@@ -122,24 +122,24 @@ GetURL:
 		jmp .filenamedone		
 	.usedefaultfilename:
 		mov al, 0
-		mov ecx, defaultfilename_len
-		mov edi, 0
+		mov rcx, defaultfilename_len
+		mov rdi, 0
 		.defaultfilenameloop:
-			mov al, [defaultfilename+edi]
-			mov [filename+edi], al
-			cmp edi, ecx
+			mov al, [defaultfilename+rdi]
+			mov [filename+rdi], al
+			cmp rdi, rcx
 			je .filenamedone
-			inc edi
+			inc rdi
 			jmp .defaultfilenameloop
 		.filenamedone:
-			xor edi, edi
+			xor rdi, rdi
 			.buildpath:
 				mov al, [ebx+ecx]
 				cmp al, 0x0
 				je .pathdone
-				mov [path+edi], al
-				inc edi
-				inc ecx
+				mov [path+rdi], al
+				inc rdi
+				inc rcx
 				jmp .buildpath
 		.pathdone:
 			cmp byte [path], 0x2F
@@ -150,10 +150,10 @@ GetURL:
 	ret
 
 DNSLookup:		;2)  DNS Lookup to find IP, IP is .sin_addr in server
-	mov eax, url  
-	push eax
+	mov rax, url  
+	push rax
 	call resolv	;nslookup url
-	add esp, 4
+	add rsp, 4
 	mov [server+sockaddr_in.sin_addr], eax
 	ret
 
@@ -162,8 +162,8 @@ CreateSocket:           ;3)  Create Socket
 	push dword 0
 	push dword 1	;SOCK_STREAM
 	push dword 2	;AF_INET
-	mov ecx, esp	;ecx must point at top of stack for sys_socket
-	mov ebx, 1	;sys_socket
+	mov rcx, rsp	;ecx must point at top of stack for sys_socket
+	mov rbx, 1	;sys_socket
 	mov eax, 0x66	;sys_socketcall
 	int 0x80   	;eax holds socket file descripter
 	add esp, 12	;resets stack leaving output file fd at top
