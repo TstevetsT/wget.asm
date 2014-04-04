@@ -22,7 +22,7 @@ push rbx
 push rsi
 push rdi
 xor rbx, rbx
-mov rbx, [rbp+12] 	;Load address of argument (URL)   +16 for gdb
+mov rbx, [rbp+24] 	;Load address of argument (URL) 24 cmdline/  32 gdb
 cmp rbx, 0x0
 je error
 call GetURL   	;Accept DNS from Command Line, parse validity, move to url
@@ -160,34 +160,36 @@ CreateSocket:           ;3)  Create Socket
 	xor rdx, rdx
 	xor rsi, rsi
 	xor rdi, rdi
-	mov rdx, 2	;AF_INET (IPv4)
-	mov rsi, 1 	;SOCK_STREAM
-	mov rdi, 0	;int family
+	xor r12, r12
+	mov rdx, 0	;int family=nt protocol=0
+	mov rsi, 1 	;int type=SOCK_STREAM
+	mov rdi, 2	;AF_INET (IPv4)
 	mov rax, 41	;sys_socket system call number
 	syscall
-	mov rsi, rax	;rsi now holds socket fd
+	mov r12, rax	;r12 now holds socket fd
 	ret
 
 MakeConnection:            ;4)  Establish Connection 
-	mov rdx, [sockaddr_size]	;sockaddr size to stack
+	mov edx, [sockaddr_size];sockaddr size to stack
 	mov rsi, server		;sockaddr struc address to stack
-	mov rdi, rsi		;socket fd to stack
+	mov rdi, r12		;socket fd to stack
 	mov rax, 42		;socketcall syscall # 102d=66x
 	syscall
 	ret	
 
 OpenFile:               ;5)  Open File named by last section of url
+	xor r13, r13
 	mov rdx, 0o0666	;Read and Write for user, group, and others
 	mov rsi, 0o102  ;O_CREAT creates the file and makes it Read/Write
 	mov edi, filename
 	mov rax, 2  	;open sys call number
 	syscall
-	mov rdi, rax	;moves output file descriptor into rdi
+	mov r13, rax	;moves output file descriptor into rdi
 	ret
 
 BuildGet:           ;get1 path get2 url get3       strlen
-	push rsi 
 	push rdi
+	push rsi
 	xor rdi, rdi
 	xor rsi, rsi
 	xor rax, rax
@@ -244,37 +246,37 @@ BuildGet:           ;get1 path get2 url get3       strlen
 			jmp .get3loop
 	.done:
 	mov [getlen], rdi	
-	pop rdi
 	pop rsi
+	pop rdi
 	ret
 
 
 WriteFile:
 	mov rdx, [getlen]	;Number of bytes to write
-	mov rcx, get
-	mov rbx, 1	;Writing to stdout
+	mov rsi, get
+	mov rdi, 1	;Writing to stdout
 	mov rax, 1	;sys_write systemcall number
 	syscall
 
-	mov rbx, rsi	;Writing to socket
+	mov rdi, r12	;Writing to socket
 	mov rax, 1	;sys_write systemcall number
 	syscall
 
 	mov rdx, recbuflen
-	mov rcx, recbuf
-	mov rbx, rsi
+	mov rsi, recbuf
+	mov rdi, r12
 	mov rax, 0	;Read From Socket
 	syscall
 
 ;	mov rdx, recbuflen
 ;	mov rcx, recbuf
-	mov rbx, rdi
+	mov rdi, r13
 	mov rax, 1	;Write to Open File
 	syscall
 	ret
 
 CloseFile:
-	mov rbx, rdi 	;File Descriptor for opened File
+	mov rdi, r13 	;File Descriptor for opened File
 	mov rax, 3      ;sys_close systemcall number rbx must be holding fd
 	ret
 
