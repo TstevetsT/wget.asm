@@ -1,0 +1,43 @@
+#In new shell   gdb m -x gtest
+#ps -a   //see all processes to find pid of interest
+#cat /proc/<pid>/maps   //displays process memory mapping
+set disassembly-flavor intel
+#set follow-fork-mode child # | child or parent
+#catch fork
+#catch exec
+
+#b _start
+#b GetURL
+#b GetURL.findfilename
+#b GetURL.pathdone
+#b DNSLookup
+b CreateSocket
+b MakeConnection
+b OpenFile
+b BuildGet
+b BuildGet.done
+b WriteFile
+b CloseFile
+
+#display /t $edx
+
+display /s &get
+display /s &recbuf
+display /s &path
+display /s &filename
+display /s &url
+#display /x &HeapStop
+#display /x &HeapStart
+#display /cb 0xbffff8d7
+disp /8xg $rbp
+disp /8xg $rsp
+disp /xg $r13
+disp /xg $r12
+disp /xg $rdx
+disp /xg $rsi
+disp /xg $rdi
+disp /xg $rax
+disp /c $al
+disp /i $rip
+
+run n www.nps.edu
